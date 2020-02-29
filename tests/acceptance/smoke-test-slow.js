@@ -328,6 +328,54 @@ describe('Acceptance: smoke-test', function() {
     }
   });
 
+  it('build failures should be logged correctly', async function() {
+    fs.writeFileSync(
+      `${process.cwd()}/ember-cli-build.js`,
+      `
+const Plugin = require('broccoli-plugin');
+
+module.exports = function() {
+  return new class extends Plugin {
+    constructor() {
+      super([]);
+    }
+    build() {
+      throw new Error('I AM A BUILD FAILURE');
+    }
+  }
+}
+      `
+    );
+
+    let errorMessageSeenSTDERR = 0;
+    let errorMessageSeenSTDOUT = 0;
+    await runCommand(
+      path.join('.', 'node_modules', 'ember-cli', 'bin', 'ember'),
+      'server',
+      '--port=54323',
+      '--live-reload=false',
+      {
+        onOutput(string) {
+          if (string.includes('I AM A BUILD FAILURE')) {
+            errorMessageSeenSTDOUT++;
+          }
+        },
+        onError(string, child) {
+          if (string.includes('I AM A BUILD FAILURE')) {
+            errorMessageSeenSTDERR++;
+          }
+
+          if (string.includes('Stack Trace and Error Report')) {
+            killCliProcess(child);
+          }
+        },
+      }
+    );
+
+    expect(errorMessageSeenSTDERR).to.eql(1);
+    expect(errorMessageSeenSTDOUT).to.eql(0);
+  });
+
   it.skip('ember new foo, server, SIGINT clears tmp/', async function() {
     let result = await runCommand(
       path.join('.', 'node_modules', 'ember-cli', 'bin', 'ember'),
